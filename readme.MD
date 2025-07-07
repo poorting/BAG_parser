@@ -6,9 +6,25 @@
 Original is by [digitaldutch](https://github.com/digitaldutch/BAG_parser) and uses SQLite as a database. I simply changed it to use DuckDB instead for the following reasons:
 * DuckDB is way faster in analysis (but slower in ingesting)
 * Very nice integration with Python (e.g. returning results as a dataframe)
-* Native ability to export to Parquet, CSV and JSON (see export section)
-  * Really, you should use Parquet over CSV...
+* Native ability to export to Parquet, TSV/CSV and JSON (see export section)
+  * Really, you should use Parquet over TSV/CSV...
 * Because why not? :-)
+
+Further improvements are the proper processing of geometry for Panden (later linked to adressen) which weren't properly processed by the original, as well as storing these geometries in a proper format (DuckDB 'GEOMETRY' data type).
+Note that by default parsing of geometries is disabled in config.py. Set 'parse_geometries' to True to enable it. 
+Regardless of this setting, locations are now stored as a single POINT(longitude, latitude) as well (lon_lat field), next to the separate longitude and latitude fields.
+
+DuckDB has spatial support, which can be enabled with
+```
+INSTALL Spatial;
+LOAD Spatial;
+INSTALL JSON;
+LOAD JSON;
+```
+Json extension is needed if you want to use GeoJSON (e.g. for import/export).
+When exporting geometries (see below) they are exported as BLOB for (Geo)Parqet, as GeoJSON for JSON and WKT (Well-Known Text) for TSV.
+
+You can use DuckDB's [spatial functions](https://duckdb.org/docs/stable/core_extensions/spatial/functions.html) to work with geometry or lon_lat fields, e.g. to find all adresses within a certain (spatial) area.
 
 ## TL;DR
 Converts in (quite) a few minutes the big, complex and hard to read XML Dutch addresses database (BAG or Basisregistratie Adressen
@@ -108,7 +124,7 @@ This should result in something like:
 Run Time (s): real 0.067 user 0.620957 sys 0.034688
 ```
 
-* When done parsing, use [export.py](export.py) to create a *.parquet, *.csv or *.json file. This file has several command line options (see below). 
+* When done parsing, use [export.py](export.py) to create a *.parquet, *.tsv or *.json file. This file has several command line options (see below). 
 These conversion functions are easy to customize. 
 Parquet is a very common (binary, compressed, self-describing) format these days for importing data into other tools.
 ## Python commands ##
@@ -122,10 +138,10 @@ Exports the addresses in DuckDB database to a *.parquet (default), *.csv or *.js
 postcode data are exported (~1 second). Use the command options below for more output formats.  
 
 ```
-./export.py -h   
-usage: export.py [-h] [-a] [-ag] [-p4] [-p5] [-p6] [--csv] [--json]
+./export.py -h 
+usage: export.py [-h] [-a] [-ag] [-p4] [-p5] [-p6] [--tsv] [--json]
 
-Export addresses in DuckDB database to a Parquet, CSV or JSON file
+Export addresses in DuckDB database to a Parquet, TSV or JSON file
 
 options:
   -h, --help        show this help message and exit
@@ -135,9 +151,8 @@ options:
   -p4, --postcode4  Export statistics of 4 character postal code groups (e.g. 1000)
   -p5, --postcode5  Export statistics of 5 character postal code groups (e.g. 1000A)
   -p6, --postcode6  Export statistics of 6 character postal code groups (e.g. 1000AA)
-  --csv             Export to CSV rather than Parquet
+  --tsv             Export to TSV (Tab Separated Values) rather than Parquet
   --json            Export to JSON rather than Parquet
-
 ```
 
 ### [test_sqlite_db.py](test_sqlite_db.py)
