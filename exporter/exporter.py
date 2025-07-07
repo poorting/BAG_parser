@@ -31,9 +31,12 @@ class Exporter:
         if output_filename.endswith('.parquet'):
             exp_lon_lat = "a.lon_lat AS lon_lat,"
             exp_geom = "a.geometry AS geometry" if export_geometry else ""
-        if output_filename.endswith('.json'):
+        elif output_filename.endswith('.json'):
             exp_lon_lat = "st_asgeojson(a.lon_lat) AS lon_lat,"
             exp_geom = "st_asgeojson(a.geometry) as geometry " if export_geometry else ""
+        elif output_filename.endswith('.tsv'):
+            exp_lon_lat = "st_astext(a.lon_lat) AS lon_lat,"
+            exp_geom = "st_astext(a.geometry) as geometry " if export_geometry else ""
 
 
         sql = f"""
