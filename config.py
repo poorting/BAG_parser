@@ -1,8 +1,8 @@
 import locale
 import psutil
 
-version = 85
-version_date = '17 June 2025'
+version = 90
+version_date = '10 July 2025'
 
 locale.setlocale(locale.LC_ALL, 'nl_NL')
 
@@ -39,6 +39,7 @@ use_short_street_names = False
 # Enable if you want to parse geometry data for woonplaatsen, panden, ligplaatsen and standplaatsen.
 # The data is stored in polygon geojson format in the geometry field.
 # And the database size will increase from 1.7GB to 16GB. Or 7GB with delete_no_longer_needed_bag_tables enabled.
+# The exported parquet file with all geometry information (-ag) will grow from 485 MB to 1.9GB
 # Parsing will also take a few minutes more.
 parse_geometries = False
 
@@ -48,9 +49,19 @@ parse_geometries = False
 delete_addresses_without_public_spaces_if_less_than = 100
 
 # The parser uses multiprocessing to speed up parsing the data. For best performance set to the number of
-# physical (not logical) CPU cores in your system. Python multiprocessing does not use hyper-threading.
+# physical (not logical) CPU cores in your system minus one or two for the main process.
+# This is faster then setting it to the total number of physical cores
+# Python multiprocessing does not use hyper-threading.
 # The psutil module automatically determines the physical CPU core count. If you don't want to install the psutil
 # module, you can just set the number manually.
-cpu_cores_used = psutil.cpu_count(False)
-# cpu_cores_used = 8
+cpu_cores = psutil.cpu_count(False)
+if cpu_cores<3:
+    cpu_cores_used = 1
+elif cpu_cores == 3:
+    cpu_cores_used = 2
+elif cpu_cores == 4:
+    cpu_cores_used = 3
+else:
+    cpu_cores_used = cpu_cores - 2
+# cpu_cores_used = 4
 

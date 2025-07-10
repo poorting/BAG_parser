@@ -2,14 +2,30 @@ import duckdb
 
 import utils
 import config
-import pandas as pd
-import numpy as np
-
+# import pandas as pd
+# import numpy as np
+import polars as pl
+import pyarrow
 
 class DatabaseDuckdb:
     connection = None
 
     # cursor = None
+    schema_overrides = {
+        'gemeente_id': pl.datatypes.UInt64,
+        'woonplaats_id': pl.datatypes.UInt64,
+        'nummer_id': pl.datatypes.String,
+        'pand_id': pl.datatypes.String,
+        'id': pl.datatypes.String,
+        'pos': pl.datatypes.String,
+        'begindatum_geldigheid': pl.datatypes.String,
+        'einddatum_geldigheid': pl.datatypes.String,
+        'verkorte_naam': pl.datatypes.String,
+        'naam': pl.datatypes.String,
+        'huisletter': pl.datatypes.String,
+        'toevoeging': pl.datatypes.String,
+        'yadayada': pl.datatypes.String,
+    }
 
     def __init__(self):
         self.connection = duckdb.connect(config.file_db_duckdb)
@@ -48,23 +64,21 @@ class DatabaseDuckdb:
         self.connection.execute(sql)
 
     def save_woonplaats(self, datarows):
-        df = pd.DataFrame(datarows)
-        pd.set_option("future.no_silent_downcasting", True)
-        df = df.replace(r'^\s*$', np.nan, regex=True)
-        # print(df['geometry'])
-        # print(df['geometry'][0])
+        df = pl.from_dicts(datarows, schema_overrides=self.schema_overrides, infer_schema_length=None)
+        geom = "st_geomfromgeojson(geometry::json) as geometry" if config.parse_geometries else "NULL as geometry"
 
         self.connection.execute(
-            """INSERT INTO woonplaatsen (woonplaats_id, naam, geometry, status, begindatum_geldigheid, einddatum_geldigheid) select 
+            f"""INSERT INTO woonplaatsen (woonplaats_id, naam, geometry, status, begindatum_geldigheid, einddatum_geldigheid) select
             id as woonplaatsen_id,
             naam,
             -- geometry,
-            st_geomfromgeojson(geometry::json) as geometry,
-            status, 
+            {geom},
+            status,
             begindatum_geldigheid,
             einddatum_geldigheid
-            FROM df"""
-                                )
+            FROM df""")
+
+
     def save_woonplaats_geometry(self, woonplaatsen):
         self.connection.executemany(
             "UPDATE woonplaatsen SET geometry=? WHERE id=?;",
@@ -80,15 +94,30 @@ class DatabaseDuckdb:
             f"UPDATE {table_name} SET longitude=?, latitude=? WHERE id=?;",
             records)
 
-    def save_gemeenten(self, gemeenten):
-        self.connection.executemany(
-            "INSERT INTO gemeenten (id, naam, provincie_id) VALUES(?, ?, ?);",
-            gemeenten)
+    def create_gemeenten_provincies(self, file_gemeenten):
+        try:
+            self.connection.execute(f"""
+                CREATE OR REPLACE TABLE gem_prov_read as select * from read_csv('{file_gemeenten}');
+            """)
+            self.connection.execute(f"""
+                CREATE OR REPLACE TABLE provincies as select Provinciecode::UBIGINT as id, first(Provincienaam) as naam FROM gem_prov_read group by all;
+            """)
+            self.connection.execute(f"""
+                CREATE OR REPLACE TABLE gemeenten as select Gemeentecode::UBIGINT as id, Gemeentenaam as naam, Provinciecode::UBIGINT as provincie_id FROM gem_prov_read group by all;
+            """)
+        except Exception as e:
+            utils.print_log(str(e), error=True)
+
 
     def save_gemeente_woonplaats(self, datarows):
-        df = pd.DataFrame(datarows)
-        pd.set_option("future.no_silent_downcasting", True)
-        df = df.replace(r'^\s*$', np.nan, regex=True)
+        df = pl.from_dicts(datarows, schema_overrides=self.schema_overrides, infer_schema_length=None)
+        df.with_columns(
+            pl.when(pl.col(pl.String).str.len_chars() == 0)
+            .then(None)
+            .otherwise(pl.col(pl.String))
+            .name.keep()
+        )
+        # print(df)
         try:
             self.connection.execute("INSERT INTO gemeente_woonplaatsen SELECT "
                                "gemeente_id,"
@@ -108,37 +137,42 @@ class DatabaseDuckdb:
             WHERE gw.woonplaats_id = woonplaatsen.woonplaats_id
             """)
 
-    def save_provincies(self, provincies):
-        self.connection.executemany(
-            "INSERT INTO provincies (id, naam) VALUES(?, ?)",
-            provincies)
-
     def save_openbare_ruimte(self, datarows):
-        for data in datarows:
-            if config.use_short_street_names:
-                data["naam"] = data["verkorte_naam"] if data["verkorte_naam"] != '' else data["lange_naam"]
-            else:
-                data["naam"] = data["lange_naam"]
+        try:
+            df = pl.from_dicts(datarows,schema_overrides=self.schema_overrides, infer_schema_length=None)
+            df.with_columns(
+                pl.when(pl.col(pl.String).str.len_chars() == 0)
+                .then(None)
+                .otherwise(pl.col(pl.String))
+                .name.keep()
+            )
 
-        df = pd.DataFrame(datarows)
-        pd.set_option("future.no_silent_downcasting", True)
-        df = df.replace(r'^\s*$', np.nan, regex=True)
-        self.connection.execute("INSERT OR REPLACE INTO openbare_ruimten SELECT "
-                           "id, "
-                           "naam, "
-                           "lange_naam, "
-                           "verkorte_naam, "
-                           "type, "
-                           "woonplaats_id,"
-                           "status,"
-                           "begindatum_geldigheid,"
-                           "einddatum_geldigheid"
-                           " FROM df")
+            self.connection.execute("INSERT OR REPLACE INTO openbare_ruimten SELECT "
+                                    "id, "
+                                    "naam, "
+                                    # "lange_naam, "
+                                    "verkorte_naam, "
+                                    "type, "
+                                    "woonplaats_id,"
+                                    "status,"
+                                    "begindatum_geldigheid,"
+                                    "einddatum_geldigheid"
+                                    " FROM df")
+        except pl.exceptions.ComputeError as e:
+            utils.print_log(str(e), error=True)
+        except Exception as e:
+            utils.print_log(str(e), error=True)
+
+
 
     def save_nummer(self, datarows):
-        df = pd.DataFrame(datarows)
-        pd.set_option("future.no_silent_downcasting", True)
-        df = df.replace(r'^\s*$', np.nan, regex=True)
+        df = pl.from_dicts(datarows,schema_overrides=self.schema_overrides, infer_schema_length=None)
+        df.with_columns(
+            pl.when(pl.col(pl.String).str.len_chars() == 0)
+            .then(None)
+            .otherwise(pl.col(pl.String))
+            .name.keep()
+        )
         try:
             self.connection.execute("INSERT OR REPLACE INTO nummers SELECT "
                                "id,postcode,huisnummer,"
@@ -155,54 +189,68 @@ class DatabaseDuckdb:
             # print(df.dtypes, flush=True)
 
     def save_pand(self, datarows):
-        df = pd.DataFrame(datarows)
-        pd.set_option("future.no_silent_downcasting", True)
-        df = df.replace(r'^\s*$', np.nan, regex=True)
-
-        # connection = self.open()
-        self.connection.execute("INSERT OR REPLACE INTO panden SELECT "
-                           "id, bouwjaar, "
-                           "st_geomfromgeojson(geometry::json) as geometry,"
-                           # "geometry,"
-                           "status,"
-                           "begindatum_geldigheid,"
-                           "einddatum_geldigheid"
-                           " FROM df")
-
-
-    def save_verblijfsobject(self, datarows):
-        df = pd.DataFrame(datarows)
-        pd.set_option("future.no_silent_downcasting", True)
-        df = df.replace(r'^\s*$', np.nan, regex=True)
-        # create geojson POINT for location as well
-        # df['lon_lat'] = df.apply(lambda row: f'{{"type":"Point", "coordinates":[{row.longitude},{row.latitude}]}}', axis=1)
         try:
-            self.connection.execute("INSERT OR REPLACE INTO verblijfsobjecten SELECT "
-                               "id,nummer_id,pand_id,"
-                               "try_cast(oppervlakte as double) as oppervlakte,"
-                               "try_cast(rd_x as double) as rd_x ,"
-                               "try_cast(rd_y as double) as rd_y,"
-                               "try_cast(latitude as double) as latitude,"
-                               "try_cast(longitude as double) as longitude,"
-                               #"st_geomfromgeojson(lon_lat::json) as lon_lat,"
-                               "NULL as lon_lat,"
-                               "gebruiksdoel,"
-                               "nevenadressen,"
+            df = pl.from_dicts(datarows,schema_overrides=self.schema_overrides, infer_schema_length=None)
+            df.with_columns(
+                pl.when(pl.col(pl.String).str.len_chars() == 0)
+                .then(None)
+                .otherwise(pl.col(pl.String))
+                .name.keep()
+            )
+
+            geom = "st_geomfromgeojson(geometry::json)" if config.parse_geometries else "NULL"
+            self.connection.execute("INSERT OR REPLACE INTO panden SELECT "
+                               "id, bouwjaar, "
+                               f"{geom} as geometry,"
+                               # "geometry,"
                                "status,"
                                "begindatum_geldigheid,"
                                "einddatum_geldigheid"
                                " FROM df")
         except Exception as e:
-            print(e, flush=True)
-            # print(df.dtypes, flush=True)
+            utils.print_log(str(e), error=True)
+
+
+    def save_verblijfsobject(self, datarows):
+        try:
+            df = pl.from_dicts(datarows,schema_overrides=self.schema_overrides, infer_schema_length=None)
+            df.with_columns(
+                pl.when(pl.col(pl.String).str.len_chars() == 0)
+                .then(None)
+                .otherwise(pl.col(pl.String))
+                .name.keep()
+            )
+
+            self.connection.execute("INSERT OR REPLACE INTO verblijfsobjecten SELECT "
+                                    "id,nummer_id,pand_id,"
+                                    "try_cast(oppervlakte as double) as oppervlakte,"
+                                    "try_cast(rd_x as double) as rd_x ,"
+                                    "try_cast(rd_y as double) as rd_y,"
+                                    "try_cast(latitude as double) as latitude,"
+                                    "try_cast(longitude as double) as longitude,"
+                                    # "st_geomfromgeojson(lon_lat::json) as lon_lat,"
+                                    "NULL as lon_lat,"
+                                    "gebruiksdoel,"
+                                    "nevenadressen,"
+                                    "status,"
+                                    "begindatum_geldigheid,"
+                                    "einddatum_geldigheid"
+                                    " FROM df")
+        except Exception as e:
+            utils.print_log(str(e), error=True)
+
 
     def save_ligplaats(self, datarows):
-        df = pd.DataFrame(datarows)
-        pd.set_option("future.no_silent_downcasting", True)
-        df = df.replace(r'^\s*$', np.nan, regex=True)
-        # create geojson POINT for location as well
-        # df['lon_lat'] = df.apply(lambda row: f'{{"type":"Point", "coordinates":[{row.longitude},{row.latitude}]}}', axis=1)
         try:
+            df = pl.from_dicts(datarows,schema_overrides=self.schema_overrides, infer_schema_length=None)
+            df.with_columns(
+                pl.when(pl.col(pl.String).str.len_chars() == 0)
+                .then(None)
+                .otherwise(pl.col(pl.String))
+                .name.keep()
+            )
+
+            geom = "st_geomfromgeojson(geometry::json)" if config.parse_geometries else "NULL"
             self.connection.execute("INSERT OR REPLACE INTO ligplaatsen SELECT "
                                "id,nummer_id,"
                                "try_cast(rd_x as double) as rd_x ,"
@@ -211,22 +259,26 @@ class DatabaseDuckdb:
                                "try_cast(longitude as double) as longitude,"
                                "NULL as lon_lat,"
                                # "geometry,"
-                               "st_geomfromgeojson(geometry::json) as geometry,"
+                               f"{geom} as geometry,"
                                "status,"
                                "begindatum_geldigheid,"
                                "einddatum_geldigheid"
                                " FROM df")
         except Exception as e:
-            print(e, flush=True)
-            # print(df.dtypes, flush=True)
+            utils.print_log(str(e), error=True)
+
 
     def save_standplaats(self, datarows):
-        df = pd.DataFrame(datarows)
-        pd.set_option("future.no_silent_downcasting", True)
-        df = df.replace(r'^\s*$', np.nan, regex=True)
-        # create geojson POINT for location as well
-        # df['lon_lat'] = df.apply(lambda row: f'{{"type":"Point", "coordinates":[{row.longitude},{row.latitude}]}}', axis=1)
         try:
+            df = pl.from_dicts(datarows,schema_overrides=self.schema_overrides, infer_schema_length=None)
+            df.with_columns(
+                pl.when(pl.col(pl.String).str.len_chars() == 0)
+                .then(None)
+                .otherwise(pl.col(pl.String))
+                .name.keep()
+            )
+
+            geom = "st_geomfromgeojson(geometry::json)" if config.parse_geometries else "NULL"
             self.connection.execute("INSERT OR REPLACE INTO standplaatsen SELECT "
                                "id,nummer_id,"
                                "try_cast(rd_x as double) as rd_x ,"
@@ -235,14 +287,14 @@ class DatabaseDuckdb:
                                "try_cast(longitude as double) as longitude,"
                                "NULL as lon_lat,"
                                # "geometry,"
-                               "st_geomfromgeojson(geometry::json) as geometry,"
+                               f"{geom} as geometry,"
                                "status,"
                                "begindatum_geldigheid,"
                                "einddatum_geldigheid"
                                " FROM df")
         except Exception as e:
-            print(e, flush=True)
-            # print(df.dtypes, flush=True)
+            utils.print_log(str(e), error=True)
+
 
     def create_bag_tables(self):
         # install and load extensions
@@ -285,7 +337,7 @@ class DatabaseDuckdb:
             CREATE TABLE openbare_ruimten (
                 id UBIGINT PRIMARY KEY,
                 naam TEXT,
-                lange_naam TEXT,
+                -- lange_naam TEXT,
                 verkorte_naam TEXT, 
                 type TEXT,
                 woonplaats_id UBIGINT,
@@ -294,7 +346,8 @@ class DatabaseDuckdb:
                 einddatum_geldigheid DATE);
 
             DROP TABLE IF EXISTS nummers;
-            CREATE TABLE nummers (id TEXT PRIMARY KEY, 
+            CREATE TABLE nummers (
+                id TEXT PRIMARY KEY, 
                 postcode TEXT, 
                 huisnummer INTEGER, 
                 huisletter TEXT,
