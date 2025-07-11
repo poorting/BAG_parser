@@ -43,7 +43,7 @@ class Exporter:
                 SELECT
                   o.naam                       AS straat,
                   a.huisnummer,
-                  a.huisletter || a.toevoeging AS toevoeging,
+                  concat(a.huisletter,a.toevoeging) AS toevoeging,
                   a.postcode,
                   g.naam                       AS gemeente,
                   w.naam                       AS woonplaats,
@@ -72,7 +72,7 @@ class Exporter:
             SELECT
               o.naam                       AS straat,
               a.huisnummer,
-              a.huisletter || a.toevoeging AS toevoeging,
+              concat(a.huisletter,a.toevoeging) AS toevoeging,
               a.postcode,
               a.latitude,
               a.longitude,
