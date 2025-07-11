@@ -96,9 +96,15 @@ class DatabaseDuckdb:
 
     def create_gemeenten_provincies(self, file_gemeenten):
         try:
-            self.connection.execute(f"""
-                CREATE OR REPLACE TABLE gem_prov_read as select * from read_csv('{file_gemeenten}');
+            if file_gemeenten.endswith('.xlsx'):
+                self.connection.execute(f"""
+                    CREATE OR REPLACE TABLE gem_prov_read as select * from read_xlsx('{file_gemeenten}', sheet='Gemeenten_alfabetisch');
+                """)
+            else:
+                self.connection.execute(f"""
+                CREATE OR REPLACE TABLE gem_prov_read as select * from '{file_gemeenten}';
             """)
+
             self.connection.execute(f"""
                 CREATE OR REPLACE TABLE provincies as select Provinciecode::UBIGINT as id, first(Provincienaam) as naam FROM gem_prov_read group by all;
             """)

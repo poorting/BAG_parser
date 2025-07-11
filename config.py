@@ -10,7 +10,7 @@ locale.setlocale(locale.LC_ALL, 'nl_NL')
 file_bag = 'input/bag.zip'
 
 # Location of the gemeenten file downloaded from cbs.nl. See readme.MD
-file_gemeenten = 'input/gemeenten.csv'
+file_gemeenten = 'input/gemeenten-alfabetisch-2025.xlsx'
 
 # Output DuckDB database with parsed BAG
 file_db_duckdb = 'output/bag.duckdb'

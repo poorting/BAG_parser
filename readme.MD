@@ -82,7 +82,7 @@ _Then follow the steps for creating the virtual environment again._
 * Download the BAG (3 GB) from [kadaster.nl](https://www.kadaster.nl/-/gratis-download-bag-extract)
   or directly from [pdok.nl](https://service.pdok.nl/kadaster/adressen/atom/v1_0/downloads/lvbag-extract-nl.zip)
   and save the file as `bag.zip` in the `input` folder.
-* The [gemeenten.csv](input/gemeenten.csv) file is already included in the `input` folder, but you can [download the latest version from the CBS website](https://www.cbs.nl/nl-nl/onze-diensten/methoden/classificaties/overig/gemeentelijke-indelingen-per-jaar). Save it as `gemeenten.csv` in the input folder.
+* The [gemeenten-alfabetisch-2025.xlsx](input/gemeenten-alfabetisch-2025.xlsx) file is already included in the `input` folder, but you can [download the latest version from the CBS website](https://www.cbs.nl/nl-nl/onze-diensten/methoden/classificaties/overig/gemeentelijke-indelingen-per-jaar). Save it in the input folder and if needed change config.py to reference the correct file.
 * Set your options in [config.py](config.py)
 * Run `./import_bag.py`
 * Drink a cup of coffee for a few minutes ☕😎 while watching the progress bar.
