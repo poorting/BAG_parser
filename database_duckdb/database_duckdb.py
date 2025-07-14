@@ -106,10 +106,10 @@ class DatabaseDuckdb:
             """)
 
             self.connection.execute(f"""
-                CREATE OR REPLACE TABLE provincies as select Provinciecode::UBIGINT as id, first(Provincienaam) as naam FROM gem_prov_read group by all;
+                CREATE OR REPLACE TABLE provincies as select Provinciecode::UBIGINT as id, ProvinciecodePV as pv_code, first(Provincienaam) as naam FROM gem_prov_read group by all;
             """)
             self.connection.execute(f"""
-                CREATE OR REPLACE TABLE gemeenten as select Gemeentecode::UBIGINT as id, Gemeentenaam as naam, Provinciecode::UBIGINT as provincie_id FROM gem_prov_read group by all;
+                CREATE OR REPLACE TABLE gemeenten as select Gemeentecode::UBIGINT as id, GemeentecodeGM as gm_code, Gemeentenaam as naam, Provinciecode::UBIGINT as provincie_id FROM gem_prov_read group by all;
             """)
         except Exception as e:
             utils.print_log(str(e), error=True)
@@ -312,11 +312,11 @@ class DatabaseDuckdb:
         """)
 
         self.connection.execute("""
-            DROP TABLE IF EXISTS gemeenten;
-            CREATE TABLE gemeenten (id UBIGINT PRIMARY KEY, naam TEXT, provincie_id UBIGINT);
+--            DROP TABLE IF EXISTS gemeenten;
+--            CREATE TABLE gemeenten (id UBIGINT PRIMARY KEY, naam TEXT, provincie_id UBIGINT);
             
-            DROP TABLE IF EXISTS provincies;
-            CREATE TABLE provincies (id UBIGINT PRIMARY KEY, naam TEXT);
+--            DROP TABLE IF EXISTS provincies;
+--            CREATE TABLE provincies (id UBIGINT PRIMARY KEY, naam TEXT);
             
             DROP TABLE IF EXISTS woonplaatsen;
             CREATE OR REPLACE SEQUENCE seq_wpid START 1;
