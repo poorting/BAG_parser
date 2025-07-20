@@ -53,7 +53,7 @@ Municipalities (gemeenten) and provinces (provincies) are added. Rijksdriehoeksc
 to standard WGS84 latitude and longitude coordinates. Invalid (dummy) bouwjaar and oppervlakte fields are removed. 
 Construction year, floor area and intended use of buildings are also provided. 
 Several tables (nummers, verblijfsobjecten, panden, ligplaatsen and standplaatsen) are merged into a general 'adressen'
-table. The DuckDB database can be used directly as a source to generate a *.csv, *.parquet or *.json file or to update your own addresses 
+table. The DuckDB database can be used directly as a source to generate a *.tsv, *.parquet or *.json file or to update your own addresses 
 databases. There are a couple of options available in the [config.py](config.py).
 
 ## Requirements
@@ -87,41 +87,41 @@ _Then follow the steps for creating the virtual environment again._
 * Run `./import_bag.py`
 * Drink a cup of coffee for a few minutes ☕😎 while watching the progress bar.
 * Open the DuckDB database with your favorite tool. I like the direct [DuckDB CLI](https://duckdb.org/docs/installation/), although a tool like [DBeaver](https://dbeaver.io/) works as well.
-Here's an example query on DuckDB database to get information about postcode 2514GL, huisnummer 78 (Paleis Noordeinde):
+Here's an example query on DuckDB database to get information about postcode 1071XX, house number 1 ([Rijksmuseum](https://www.rijksmuseum.nl/nl)):
 ```SQL
 SELECT
-  a.postcode,
-  a.huisnummer,
-  a.huisletter || a.toevoeging AS toevoeging,
-  o.naam                       AS straat,
-  g.naam                       AS gemeente,
-  w.naam                       AS woonplaats,
-  p.naam                       AS provincie,
-  a.bouwjaar,
-  a.latitude,
-  a.longitude,
-  a.rd_x,
-  a.rd_y,
-  a.oppervlakte                AS vloeroppervlakte,
-  a.gebruiksdoel,
-  a.hoofd_nummer_id
-FROM adressen a
-  LEFT JOIN openbare_ruimten o ON a.openbare_ruimte_id = o.id
-  LEFT JOIN gemeenten g        ON a.gemeente_id        = g.id
-  LEFT JOIN woonplaatsen w     ON a.woonplaats_id      = w.woonplaats_id
-  LEFT JOIN provincies p       ON g.provincie_id       = p.id
-WHERE postcode = '2514GL'
-  AND huisnummer = 68;
+    a.postcode,
+    a.huisnummer,
+    concat(a.huisletter,a.toevoeging) AS toevoeging,
+    o.naam                       AS straat,
+    g.naam                       AS gemeente,
+    w.naam                       AS woonplaats,
+    p.naam                       AS provincie,
+    a.bouwjaar,
+    a.latitude,
+    a.longitude,
+    a.rd_x,
+    a.rd_y,
+    a.oppervlakte                AS vloeroppervlakte,
+    a.gebruiksdoel,
+    a.geometry
+  FROM adressen a
+    LEFT JOIN openbare_ruimten o ON a.openbare_ruimte_id = o.id
+    LEFT JOIN gemeenten g        ON a.gemeente_id        = g.id
+    LEFT JOIN woonplaatsen w     ON a.woonplaats_id      = w.woonplaats_id
+    LEFT JOIN provincies p       ON g.provincie_id       = p.id
+  WHERE postcode = '1071XX'
+    AND huisnummer = 1;
 ```
 This should result in something like:
 ```commandline
-┌──────────┬────────────┬────────────┬────────────┬───────────────┬───────────────┬──────────────┬──────────┬──────────┬───────────┬──────────┬───────────┬──────────────────┬─────────────────────────┬─────────────────┐
-│ postcode │ huisnummer │ toevoeging │   straat   │   gemeente    │  woonplaats   │  provincie   │ bouwjaar │ latitude │ longitude │   rd_x   │   rd_y    │ vloeroppervlakte │      gebruiksdoel       │ hoofd_nummer_id │
-│ varchar  │   int32    │  varchar   │  varchar   │    varchar    │    varchar    │   varchar    │  int32   │  float   │   float   │  float   │   float   │      float       │         varchar         │     varchar     │
-├──────────┼────────────┼────────────┼────────────┼───────────────┼───────────────┼──────────────┼──────────┼──────────┼───────────┼──────────┼───────────┼──────────────────┼─────────────────────────┼─────────────────┤
-│ 2514GL   │     68     │ NULL       │ Noordeinde │ 's-Gravenhage │ 's-Gravenhage │ Zuid-Holland │   1814   │ 52.08101 │ 4.3066735 │ 80933.69 │ 455299.28 │     11923.0      │ overige gebruiksfunctie │ NULL            │
-└──────────┴────────────┴────────────┴────────────┴───────────────┴───────────────┴──────────────┴──────────┴──────────┴───────────┴──────────┴───────────┴──────────────────┴─────────────────────────┴─────────────────┘
-Run Time (s): real 0.067 user 0.620957 sys 0.034688
+┌──────────┬────────────┬────────────┬──────────────┬───────────┬────────────┬───────────────┬──────────┬────────────────────┬───────────────────┬────────────┬────────────┬──────────────────┬────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ postcode │ huisnummer │ toevoeging │    straat    │ gemeente  │ woonplaats │   provincie   │ bouwjaar │      latitude      │     longitude     │    rd_x    │    rd_y    │ vloeroppervlakte │    gebruiksdoel    │                                             geometry                                             │
+│ varchar  │   int32    │  varchar   │   varchar    │  varchar  │  varchar   │    varchar    │  int32   │       double       │      double       │   double   │   double   │      double      │      varchar       │                                             geometry                                             │
+├──────────┼────────────┼────────────┼──────────────┼───────────┼────────────┼───────────────┼──────────┼────────────────────┼───────────────────┼────────────┼────────────┼──────────────────┼────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 1071XX   │     1      │            │ Museumstraat │ Amsterdam │ Amsterdam  │ Noord-Holland │   1885   │ 52.359944393925666 │ 4.885388960213037 │ 120816.373 │ 485901.503 │     38149.0      │ bijeenkomstfunctie │ POLYGON ((4.885886585827963 52.359101529202945, 4.885918932342236 52.359085353436825, 4.885931…  │
+└──────────┴────────────┴────────────┴──────────────┴───────────┴────────────┴───────────────┴──────────┴────────────────────┴───────────────────┴────────────┴────────────┴──────────────────┴────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────┘
+Run Time (s): real 0.049 user 0.423851 sys 0.005528
 ```
 
 * When done parsing, use [export.py](export.py) to create a *.parquet, *.tsv or *.json file. This file has several command line options (see below). 
