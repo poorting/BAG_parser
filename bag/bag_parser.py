@@ -31,14 +31,24 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
         # print(f"find_nested {bag_element}, {nested_list}")
         nested_list1 = nested_list.copy()
         nested_field = nested_list1.pop(0)
-        field = bag_element.findall('.//{*}' + nested_field)
-        if field:
-            # print(f"\tfound: {field}")
+        fields = bag_element.findall('.//{*}' + nested_field)
+        if fields:
+            result_list = None
+            # if len(fields) > 1:
+            #     print(f"\tfound: {fields} {len(fields)} times")
             if nested_list1:
-                return find_nested(field[0], nested_list1)
+                for field in fields:
+                    # return find_nested(field[0], nested_list1)
+                    res = find_nested(field, nested_list1)
+                    if res:
+                        if not result_list:
+                            result_list = res
+                        else:
+                            result_list.extend(res)
+                return result_list
             else:
                 # print(f"\tvalue: {field[0].text}")
-                return field[0].text
+                return [field.text for field in fields]
 
         return None
 
@@ -68,6 +78,7 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
     data = data_init.copy()
     coordinates_field = None
     has_geometry = False
+    list_field = None
     # 2 or 3 coordinates for geometry?
     # (Panden use 3, ligplaats & standplaats use 2)
     geometry_points = 2
@@ -92,6 +103,7 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
             geometry_points = 3
         case 'Verblijfsobject':
             coordinates_field = 'pos'
+            list_field = 'gebruiksdoel'
         case 'Ligplaats':
             coordinates_field = 'geometry'
             has_geometry = True
@@ -108,7 +120,15 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
     for bag_object in bag_objects:
         data = data_init.copy()
         for db_field, xml_field in db_fields.items():
-            data[db_field] = find_nested(bag_object, xml_field)
+            # data[db_field] = find_nested(bag_object, xml_field)
+            results = find_nested(bag_object, xml_field)
+            # print(f"{xml_field} : {results} - {len(results) if results else 'None'}")
+            data[db_field] = None
+            if results:
+                if db_field != list_field:
+                    data[db_field] = results[0]
+                else:
+                    data[db_field] = results
 
         db_data.append(data)
 

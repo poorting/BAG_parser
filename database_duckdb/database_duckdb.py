@@ -383,7 +383,7 @@ class DatabaseDuckdb:
                 latitude DOUBLE, 
                 longitude DOUBLE, 
                 lon_lat GEOMETRY, 
-                gebruiksdoel TEXT, 
+                gebruiksdoel TEXT[], 
                 nevenadressen TEXT,
                 status TEXT, 
                 begindatum_geldigheid DATE, 
@@ -436,7 +436,7 @@ class DatabaseDuckdb:
                 woonplaats_id UBIGINT, 
                 openbare_ruimte_id UBIGINT, 
                 object_type TEXT, 
-                gebruiksdoel TEXT, 
+                gebruiksdoel TEXT[], 
                 postcode TEXT, 
                 huisnummer INTEGER, 
                 huisletter TEXT, 
@@ -834,12 +834,12 @@ class DatabaseDuckdb:
         utils.print_log("test: panden zonder locatie: " + str(count), count > 0)
 
         count = self.fetchone("SELECT COUNT(*) FROM adressen "
-                                   "WHERE adressen.latitude IS NULL AND gebruiksdoel='ligplaats';")
+                                   "WHERE adressen.latitude IS NULL AND object_type='ligplaats';")
         total_error_count += count
         utils.print_log("test: ligplaatsen zonder locatie: " + str(count), count > 0)
 
         count = self.fetchone("SELECT COUNT(*) FROM adressen "
-                                   "WHERE adressen.latitude IS NULL AND gebruiksdoel='standplaats';")
+                                   "WHERE adressen.latitude IS NULL AND object_type='standplaats';")
         total_error_count += count
         utils.print_log("test: standplaatsen zonder locatie: " + str(count), count > 0)
 
