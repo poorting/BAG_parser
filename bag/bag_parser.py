@@ -43,7 +43,8 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
         # print(f"find_field {bag_element}, {nested_list}")
         fields = bag_element.findall('.//{*}' + field_name)
         if fields:
-            return [field.text for field in fields]
+            doelen = [field.text for field in fields]
+            return "\t".join(doelen)
         return None
 
     def find_nested_field(bag_element, nested_list):
@@ -82,7 +83,9 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
                 return result_list
             else:
                 # print(f"\tvalue: {field[0].text}")
-                return [field.text for field in fields]
+                # return [field.text for field in fields]
+                doelen = [field.text for field in fields]
+                return "\t".join(doelen)
 
         return None
 
