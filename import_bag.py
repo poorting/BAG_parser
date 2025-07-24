@@ -32,11 +32,8 @@ def main():
 
     utils.unzip_files_multithreaded(config.file_bag, temp_folder_name)
 
-    # db_sqlite = DatabaseSqlite()
     db_duckdb = DatabaseDuckdb()
 
-    # utils.print_log("create BAG SQLite database structure")
-    # db_sqlite.create_bag_tables()
     utils.print_log("create BAG DuckDB database structure")
     db_duckdb.create_bag_tables()
 
