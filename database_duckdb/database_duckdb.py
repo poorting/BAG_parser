@@ -30,6 +30,13 @@ class DatabaseDuckdb:
     def __init__(self):
         self.connection = duckdb.connect(config.file_db_duckdb)
         # self.connection = duckdb.connect()
+        # install and load extensions
+        self.connection.execute("""
+            install spatial;
+            load spatial;
+            install json;
+            load json;
+        """)
 
     def close(self):
         self.connection.commit()
@@ -303,14 +310,6 @@ class DatabaseDuckdb:
 
 
     def create_bag_tables(self):
-        # install and load extensions
-        self.connection.execute("""
-        install spatial;
-        load spatial;
-        install json;
-        load json;
-        """)
-
         self.connection.execute("""
 --            DROP TABLE IF EXISTS gemeenten;
 --            CREATE TABLE gemeenten (id UBIGINT PRIMARY KEY, naam TEXT, provincie_id UBIGINT);
@@ -428,7 +427,7 @@ class DatabaseDuckdb:
                 nummer_id TEXT PRIMARY KEY, 
                 nummer_begindatum_geldigheid DATE, 
                 nummer_einddatum_geldigheid DATE, 
-                pand_id TEXT, 
+                pand_id TEXT[], 
                 pand_begindatum_geldigheid DATE, 
                 pand_einddatum_geldigheid DATE, 
                 verblijfsobject_id TEXT, 
@@ -480,7 +479,7 @@ class DatabaseDuckdb:
                 n.id AS nummer_id,
                 n.begindatum_geldigheid,
                 n.einddatum_geldigheid,
-                p.id,
+                split(p.id, e'\t'),
                 p.begindatum_geldigheid,
                 p.einddatum_geldigheid,
                 v.id AS verblijfsobject_id,
@@ -533,44 +532,148 @@ class DatabaseDuckdb:
 
     def adressen_import_meerdere_panden(self):
 
+        # Verblijfsobjecten can be linked to multiple Panden (case for roughly 33k5 of them)
+        # In initial ingestion these are encoded as \t (tab) separated pand_id-s in
+        # the verblijfsobjecten table.
+        # meaning that initial insert into adressen table will not match for these instances
+        # (because a combined pand_id in verblijfsobjecten table will not be equal to any
+        # id in the panden table).
+        # In the end we want to combine the geometries of all Panden involved and take
+        # the earliest bouwjaar (year of build), since having bouwjaar as a list is a bit
+        # of a pain.
+
+        # So we construct a view that has the unnested combination of verblijfsobjecten and panden.
+        # e.g. a verblijfsobject with two panden linked to it will appear twice in this view
+        # each with a single pand_id (and bouwjaar and geometry).
+        # This can then be folded back into adressen by taking earliest bouwjaar and
+        # the combine geometry (provided by spatial function of DuckDB)
+
+        # unnest multiple pand_id-s
         self.connection.execute("""
-            DROP TABLE IF EXISTS temp_pand_ids;
-            
-            CREATE TEMP TABLE temp_pand_ids (
-            nummer_id TEXT,
-            pand_id TEXT
-        );""")
-
-        adressen = self.fetchall(
-            "SELECT nummer_id, pand_id FROM verblijfsobjecten WHERE pand_id LIKE '%,%'")
-
-        parameters = []
-        for adres in adressen:
-            pand_ids = adres[1].split(',')
-            for pand_id in pand_ids:
-                parameters.append([adres[0], pand_id])
-
-        sql = "INSERT INTO temp_pand_ids (nummer_id, pand_id) VALUES (?, ?)"
-        if len(parameters) > 0:
-            self.connection.executemany(sql, parameters)
-
-        # Copy bouwjaar and geometry to adressen table. Only last one remains.
-        # Maybe add a multi-bouwjaar and multi-geometry option later.
-        self.connection.execute("""
-            UPDATE adressen SET
-              geometry = p.geometry,
-              bouwjaar = p.bouwjaar
-            FROM (
-                   SELECT
-                     t.pand_id,
-                     t.nummer_id,
-                     panden.geometry,
-                     panden.bouwjaar
-                   FROM temp_pand_ids t
-                          LEFT JOIN panden ON panden.id = t.pand_id
-                 ) AS p
-            WHERE p.nummer_id = adressen.nummer_id;
+            CREATE OR REPLACE VIEW temp_vo_pand_id AS
+            SELECT id, unnest(split(pand_id, e'\t')) AS pand_id
+            FROM verblijfsobjecten where pand_id like e'%\t%';
         """)
+        # Create another view which combines with geometry
+        self.connection.execute("""
+            CREATE OR REPLACE VIEW temp_vo_pand_geometries AS
+            SELECT
+                v.id,
+                list(v.pand_id) as pand_id,
+                min(bouwjaar) as bouwjaar,
+                st_collect(list(p.geometry)) as geometry,
+                max(p.begindatum_geldigheid) as pand_begindatum_geldigheid,
+                max(p. einddatum_geldigheid) as pand_einddatum_geldigheid
+            FROM temp_vo_pand_id v LEFT JOIN panden p ON v.pand_id = p.id
+            GROUP BY ALL ORDER BY pand_id ASC;
+        """)
+        # Now create a view that combines verblijfsobject with these
+        self.connection.execute("""
+            CREATE OR REPLACE VIEW vo_panden AS
+            SELECT t.id, v.* EXCLUDE (v.id, v.pand_id), t.* EXCLUDE (t.id)
+            FROM temp_vo_pand_geometries t LEFT JOIN verblijfsobjecten v ON t.id=v.id;
+        """)
+
+        # Update the adressen table with this combined verblijfsobject/panden table
+        # But only for those present in that combined table, so use right join
+        # and filter on nummers.id not NULL
+        self.connection.execute("""
+            INSERT OR REPLACE INTO adressen (
+                nummer_id,
+                nummer_begindatum_geldigheid,
+                nummer_einddatum_geldigheid,
+                pand_id,
+                pand_begindatum_geldigheid,
+                pand_einddatum_geldigheid,
+                verblijfsobject_id,
+                gemeente_id,
+                woonplaats_id,
+                openbare_ruimte_id,
+                object_type,
+                gebruiksdoel,
+                postcode,
+                huisnummer,
+                huisletter,
+                toevoeging,
+                oppervlakte,
+                rd_x,
+                rd_y,
+                longitude,
+                latitude,
+                lon_lat,
+                bouwjaar,
+                geometry)
+            SELECT
+                n.id AS nummer_id,
+                n.begindatum_geldigheid,
+                n.einddatum_geldigheid,
+                v.pand_id,
+                v.pand_begindatum_geldigheid,
+                v.pand_einddatum_geldigheid,
+                v.id AS verblijfsobject_id,
+                w.gemeente_id,
+                o.woonplaats_id,
+                o.id,
+                'verblijfsobject',
+                split(v.gebruiksdoel,e'\t') as gebruiksdoel,
+                n.postcode,
+                n.huisnummer,
+                n.huisletter,
+                n.toevoeging,
+                v.oppervlakte,
+                v.rd_x,
+                v.rd_y,
+                v.longitude,
+                v.latitude,
+                v.lon_lat,
+                v.bouwjaar,
+                v.geometry
+            FROM nummers n
+            RIGHT JOIN openbare_ruimten o  ON o.id            = n.openbare_ruimte_id
+            RIGHT JOIN woonplaatsen w      ON w.woonplaats_id = o.woonplaats_id
+            RIGHT JOIN vo_panden v ON v.nummer_id     = n.id
+            WHERE n.id IS NOT NULL;
+        """)
+
+
+        # self.connection.execute("""
+        #     DROP TABLE IF EXISTS temp_pand_ids;
+        #
+        #     CREATE TEMP TABLE temp_pand_ids (
+        #     nummer_id TEXT,
+        #     pand_id TEXT
+        # );""")
+        #
+        # adressen = self.fetchall(
+        #     "SELECT nummer_id, pand_id FROM verblijfsobjecten WHERE pand_id LIKE e'%\t%'")
+        #
+        # parameters = []
+        # for adres in adressen:
+        #     pand_ids = adres[1].split('\t')
+        #     for pand_id in pand_ids:
+        #         parameters.append([adres[0], pand_id])
+        #
+        # sql = "INSERT INTO temp_pand_ids (nummer_id, pand_id) VALUES (?, ?)"
+        # if len(parameters) > 0:
+        #     self.connection.executemany(sql, parameters)
+        #
+        # # Copy bouwjaar and geometry to adressen table. Only last one remains.
+        # # Maybe add a multi-bouwjaar and multi-geometry option later.
+        # self.connection.execute("""
+        #     UPDATE adressen SET
+        #       geometry = p.geometry,
+        #       bouwjaar = p.bouwjaar
+        #     FROM (
+        #            SELECT
+        #              t.pand_id,
+        #              t.nummer_id,
+        #              panden.geometry,
+        #              panden.bouwjaar
+        #            FROM temp_pand_ids t
+        #                   LEFT JOIN panden ON panden.id = t.pand_id
+        #          ) AS p
+        #     WHERE p.nummer_id = adressen.nummer_id;
+        # """)
 
     def adressen_import_ligplaatsen(self):
         self.connection.execute("""

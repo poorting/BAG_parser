@@ -330,9 +330,9 @@ class BagParser:
                 'begindatum_geldigheid': ('beginGeldigheid', FIND_FIELD),
                 'einddatum_geldigheid': ('eindGeldigheid', FIND_FIELD),
                 'status': ('status', FIND_FIELD),
-                'pand_id': ('PandRef', FIND_FIELD),
+                'pand_id': ('PandRef', FIND_FIELD_MULTI),
                 'nummer_id': (['heeftAlsHoofdadres', 'NummeraanduidingRef'], FIND_NESTED_FIELD),
-                'nevenadressen': (['heeftAlsNevenadres', 'NummeraanduidingRef'], FIND_NESTED_FIELD),
+                'nevenadressen': (['heeftAlsNevenadres', 'NummeraanduidingRef'], FIND_NESTED_FIELD_MULTI),
             }
 
         elif self.tag_name == 'Ligplaats':
