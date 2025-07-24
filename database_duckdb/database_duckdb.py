@@ -421,9 +421,7 @@ class DatabaseDuckdb:
 
         utils.print_log('create adressen tabel: import adressen')
         self.connection.execute(f"""
-            DROP TABLE IF EXISTS adressen;
-            
-            CREATE TABLE adressen (
+            CREATE OR REPLACE TABLE adressen (
                 nummer_id TEXT PRIMARY KEY, 
                 nummer_begindatum_geldigheid DATE, 
                 nummer_einddatum_geldigheid DATE, 
