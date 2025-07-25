@@ -269,7 +269,7 @@ select count() as woningen from adressen where list_contains(gebruiksdoel,'woonf
 └────────────────┘
 Run Time (s): real 0.062 user 0.572649 sys 0.010185
 ```
-If you want to see all distinct possibilities of gebruiksdoel:
+If you want to see all possible values of gebruiksdoel:
 ```
 select unnest(list_distinct(flatten(list(distinct(gebruiksdoel))))) as gebruiksdoelen from adressen order by gebruiksdoelen asc; 
 ┌─────────────────────────┐
