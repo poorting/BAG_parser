@@ -465,13 +465,14 @@ class DatabaseDuckdb:
         self.connection.execute(
             "UPDATE adressen SET lon_lat=st_point(longitude, latitude) WHERE lon_lat is NULL and longitude is not NULL and latitude is not NULL")
 
-        utils.print_log('create adressen tabel: Create R-Tree index on geometry column')
-        self.connection.execute(
-            "CREATE INDEX geom_idx ON adressen USING RTREE (geometry)")
-
-        utils.print_log('create adressen tabel: Create R-Tree index on lon_lat column')
-        self.connection.execute(
-            "CREATE INDEX ll_idx ON adressen USING RTREE (lon_lat)")
+        # Creating R-Tree index disabled as it can slow down specific queries significantly...
+        # utils.print_log('create adressen tabel: Create R-Tree index on geometry column')
+        # self.connection.execute(
+        #     "CREATE INDEX geom_idx ON adressen USING RTREE (geometry)")
+        #
+        # utils.print_log('create adressen tabel: Create R-Tree index on lon_lat column')
+        # self.connection.execute(
+        #     "CREATE INDEX ll_idx ON adressen USING RTREE (lon_lat)")
 
         # self.connection.commit()
 
