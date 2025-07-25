@@ -186,7 +186,6 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
             db_data = geometry_to_wgs84(db_data, geometry_points)
         else:
             db_data = geometry_to_empty(db_data)
-
     return {'count':xml_count, 'data':db_data}
 
 
@@ -409,7 +408,7 @@ class BagParser:
             case 'OpenbareRuimte':
                 save_function = self.database.save_openbare_ruimte
                 if config.use_short_street_names:
-                    post_sql = 'UPDATE openbare_ruimten SET naam=verkorte_naam WHERE verkorte_naam is not NULL';
+                    post_sql = 'UPDATE openbare_ruimten SET naam=verkorte_naam WHERE verkorte_naam is not NULL'
             case 'Nummeraanduiding':
                 save_function = self.database.save_nummer
             case 'Pand':
