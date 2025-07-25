@@ -177,7 +177,18 @@ D install spatial;
 D load spatial;
 D create view adressen as select * from 'adressen_all_data_geometry.parquet';
 ```
-If you **do** want to load the data into memory (for marginally faster performance) simply replace 'view' with 'table' in the command above.
+You can work with the view the same as with a table. For example to get the number of distinct postcodes within roughly the Amsterdam area:
+```commandline
+SELECT count(distinct(postcode)) FROM adressen WHERE ST_Contains(ST_GeomFromText('POLYGON ((4.805820879982093 52.283282143126215,5.002544817970374 52.283282143126215,5.002544817970374 52.43005962183452,4.805820879982093 52.43005962183452, 4.805820879982093 52.283282143126215))'), lon_lat);
+┌──────────────────────────┐
+│ count(DISTINCT postcode) │
+│          int64           │
+├──────────────────────────┤
+│          20277           │
+└──────────────────────────┘
+Run Time (s): real 0.678 user 6.417792 sys 0.406322
+```
+If you **do** want to load the data into memory (for marginally faster performance) simply replace 'view' with 'table' in the create command above. The postcode example given will then complete in roughly 0.57 seconds instead of 0.68, demonstrating the ability of DuckDB to efficiently query from parquet files on disk!
 
 ### Transforming parquet to DuckDB database
 If you would rather have a .duckdb file to open directly with DuckDB you can simply do:
