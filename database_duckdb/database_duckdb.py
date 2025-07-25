@@ -46,9 +46,6 @@ class DatabaseDuckdb:
     def commit(self):
         self.connection.commit()
 
-    def fetchmany_init(self, sql):
-        self.execute(sql)
-
     def fetchone(self, sql):
         return self.connection.execute(sql).fetchone()[0]
 
@@ -105,11 +102,11 @@ class DatabaseDuckdb:
         try:
             if file_gemeenten.endswith('.xlsx'):
                 self.connection.execute(f"""
-                    CREATE OR REPLACE TABLE gem_prov_read as select * from read_xlsx('{file_gemeenten}', sheet='Gemeenten_alfabetisch');
+                    CREATE OR REPLACE TEMP TABLE gem_prov_read as select * from read_xlsx('{file_gemeenten}', sheet='Gemeenten_alfabetisch');
                 """)
             else:
                 self.connection.execute(f"""
-                CREATE OR REPLACE TABLE gem_prov_read as select * from '{file_gemeenten}';
+                CREATE OR REPLACE TEMP TABLE gem_prov_read as select * from '{file_gemeenten}';
             """)
 
             self.connection.execute(f"""
@@ -169,7 +166,7 @@ class DatabaseDuckdb:
                                     "status,"
                                     "begindatum_geldigheid,"
                                     "einddatum_geldigheid"
-                                    " FROM df")
+                                    " FROM df ORDER BY id ASC")
         except pl.exceptions.ComputeError as e:
             utils.print_log(str(e), error=True)
         except Exception as e:
@@ -193,7 +190,7 @@ class DatabaseDuckdb:
                                     "status,"
                                     "begindatum_geldigheid,"
                                     "einddatum_geldigheid"
-                                    " FROM df")
+                                    " FROM df ORDER BY id ASC")
         except Exception as e:
             print(e, flush=True)
             # print(df.dtypes, flush=True)
@@ -216,7 +213,7 @@ class DatabaseDuckdb:
                                     "status,"
                                     "begindatum_geldigheid,"
                                     "einddatum_geldigheid"
-                                    " FROM df")
+                                    " FROM df ORDER BY id ASC")
         except Exception as e:
             utils.print_log(str(e), error=True)
 
@@ -237,14 +234,13 @@ class DatabaseDuckdb:
                                     "try_cast(rd_y as double) as rd_y,"
                                     "try_cast(latitude as double) as latitude,"
                                     "try_cast(longitude as double) as longitude,"
-                                    # "st_geomfromgeojson(lon_lat::json) as lon_lat,"
                                     "NULL as lon_lat,"
                                     "gebruiksdoel,"
                                     "nevenadressen,"
                                     "status,"
                                     "begindatum_geldigheid,"
                                     "einddatum_geldigheid"
-                                    " FROM df")
+                                    " FROM df ORDER BY nummer_id ASC")
         except Exception as e:
             utils.print_log(str(e), error=True)
 
@@ -266,12 +262,11 @@ class DatabaseDuckdb:
                                     "try_cast(latitude as double) as latitude,"
                                     "try_cast(longitude as double) as longitude,"
                                     "NULL as lon_lat,"
-                                    # "geometry,"
                                     f"{geom} as geometry,"
                                     "status,"
                                     "begindatum_geldigheid,"
                                     "einddatum_geldigheid"
-                                    " FROM df")
+                                    " FROM df ORDER BY nummer_id ASC")
         except Exception as e:
             utils.print_log(str(e), error=True)
 
@@ -293,23 +288,16 @@ class DatabaseDuckdb:
                                     "try_cast(latitude as double) as latitude,"
                                     "try_cast(longitude as double) as longitude,"
                                     "NULL as lon_lat,"
-                                    # "geometry,"
                                     f"{geom} as geometry,"
                                     "status,"
                                     "begindatum_geldigheid,"
                                     "einddatum_geldigheid"
-                                    " FROM df")
+                                    " FROM df ORDER BY nummer_id ASC")
         except Exception as e:
             utils.print_log(str(e), error=True)
 
     def create_bag_tables(self):
         self.connection.execute("""
---            DROP TABLE IF EXISTS gemeenten;
---            CREATE TABLE gemeenten (id UBIGINT PRIMARY KEY, naam TEXT, provincie_id UBIGINT);
-            
---            DROP TABLE IF EXISTS provincies;
---            CREATE TABLE provincies (id UBIGINT PRIMARY KEY, naam TEXT);
-            
             DROP TABLE IF EXISTS woonplaatsen;
             CREATE OR REPLACE SEQUENCE seq_wpid START 1;
             CREATE TABLE woonplaatsen (
@@ -414,6 +402,10 @@ class DatabaseDuckdb:
 
         utils.print_log('create adressen tabel: import adressen')
 
+        # Use CTAS (Create Table As Select) since it is ~ 30% faster
+        # than creating a table first and then inserting values
+        # A primary key column cannot be created that way,
+        # So that is done afterwards by altering the nummer_id column.
         self.connection.execute("""
             CREATE OR REPLACE TABLE adressen AS
             SELECT
@@ -466,9 +458,6 @@ class DatabaseDuckdb:
         utils.print_log('create adressen tabel: import woonplaatsen from nummers')
         self.adressen_update_woonplaatsen_from_nummers()
 
-        # utils.print_log('create adressen tabel: create indices')
-        # self.create_indices_adressen()
-
         utils.print_log('create adressen tabel: update nevenadressen data')
         self.adressen_update_nevenadressen()
 
@@ -518,7 +507,7 @@ class DatabaseDuckdb:
 
         # Now create a view that combines verblijfsobject with these
         self.connection.execute("""
-            CREATE OR REPLACE VIEW vo_panden AS
+            CREATE OR REPLACE TEMP VIEW vo_panden AS
             SELECT t.id, v.* EXCLUDE (v.id, v.pand_id), t.* EXCLUDE (t.id)
             FROM temp_vo_pand_geometries t LEFT JOIN verblijfsobjecten v ON t.id=v.id;
         """)
@@ -584,7 +573,7 @@ class DatabaseDuckdb:
             WHERE n.id IS NOT NULL;
         """)
         # We could have done this slightly simpler with an update statement as below
-        # But that turns out to be 1.5s *slower* than 'insert or replace'.
+        # But that turns out to be 1.5s (~ 25%) *slower* than 'insert or replace'.
         # self.connection.execute("""
         #     UPDATE adressen SET
         #         pand_id = p.pand_id,
