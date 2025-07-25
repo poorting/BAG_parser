@@ -381,8 +381,6 @@ class BagParser:
         utils.print_log('convert XML files to DuckDB')
         self.__parse_xml_files()
 
-        self.database.commit()
-
         time_elapsed = utils.time_elapsed(self.start_time)
         utils.print_log(f'ready: parse XML {self.tag_name} | {time_elapsed} '
                         f'| XML nodes: {self.count_xml_tags:,d}')
