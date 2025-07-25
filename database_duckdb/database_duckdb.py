@@ -1,11 +1,9 @@
 import duckdb
+import polars as pl
+import os
 
 import utils
 import config
-# import pandas as pd
-# import numpy as np
-import polars as pl
-import pyarrow
 
 
 class DatabaseDuckdb:
@@ -32,7 +30,7 @@ class DatabaseDuckdb:
         self.connection = duckdb.connect(config.file_db_duckdb)
         # self.connection = duckdb.connect()
         # install and load extensions
-        self.connection.execute("""
+        self.connection.execute(f"""
             install spatial;
             load spatial;
             install json;
@@ -40,11 +38,7 @@ class DatabaseDuckdb:
         """)
 
     def close(self):
-        self.connection.commit()
         self.connection.close()
-
-    def commit(self):
-        self.connection.commit()
 
     def fetchone(self, sql):
         return self.connection.execute(sql).fetchone()[0]
@@ -55,18 +49,28 @@ class DatabaseDuckdb:
     def fetchmany(self, size=1000):
         return self.connection.fetchmany(size)
 
-    def start_transaction(self):
-        self.connection.execute("BEGIN TRANSACTION")
-
-    def commit_transaction(self):
-        self.connection.execute("COMMIT TRANSACTION")
-
-    def vacuum(self):
-        # self.connection.execute("VACUUM")
-        None
-
     def post_process(self, sql):
         self.connection.execute(sql)
+
+    def enable_progress_bar(self):
+        self.connection.execute("PRAGMA enable_progress_bar;")
+
+    def disable_progress_bar(self):
+        self.connection.execute("PRAGMA disable_progress_bar;")
+
+    def copy_database(self, target_db_path):
+        # Remove target database if it exists
+        if os.path.isfile(target_db_path) or os.path.islink(target_db_path):
+            os.unlink(target_db_path)
+
+        # Attach the new database
+        self.connection.execute(f"ATTACH '{target_db_path}'")
+        # The name of the db in duckdb
+        db_name = os.path.splitext(os.path.basename(target_db_path))[0]
+
+        # Copy the database
+        self.connection.execute(f"COPY FROM DATABASE bag TO {db_name}")
+        self.connection.execute(f"DETACH {db_name};")
 
     def save_woonplaats(self, datarows):
         df = pl.from_dicts(datarows, schema_overrides=self.schema_overrides, infer_schema_length=None)
@@ -626,7 +630,7 @@ class DatabaseDuckdb:
 
         # Create unnested view of hoofdadressen and nevenadressen
         self.connection.execute("""
-            CREATE OR REPLACE VIEW nevenadressen AS
+            CREATE OR REPLACE TEMP VIEW nevenadressen AS
             SELECT 
                 unnest(split(nevenadressen, e'\t')) as neven_nummer_id,
                 nummer_id as hoofd_nummer_id

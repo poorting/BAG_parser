@@ -10,7 +10,7 @@ Original is by [digitaldutch](https://github.com/digitaldutch/BAG_parser) and us
   * Really, you should use Parquet over TSV/CSV...
 * Because why not? :-)
 
-Further improvements are the proper processing of geometry for Panden (later linked to adressen) which weren't properly processed by the original, as well as storing these geometries in a proper format (DuckDB 'GEOMETRY' data type).
+Further improvements are the proper processing of geometry for Panden (later linked to adressen) which weren't properly processed by the original, as well as storing these geometries in an appropriate data type (DuckDB 'GEOMETRY' data type).
 Note that by default parsing of geometries is disabled in config.py. Set 'parse_geometries' to True to enable it. 
 Regardless of this setting, locations are now stored as a single POINT(longitude, latitude) as well (lon_lat field), next to the separate longitude and latitude fields.
 
@@ -155,14 +155,17 @@ options:
   --json            Export to JSON rather than Parquet
 ```
 
-### [test_sqlite_db.py](test_sqlite_db.py)
+### [test_duckdb_db.py](test_duckdb_db.py)
 Checks the DuckDB database for info and errors. `import_bag.py` also performs these tests after parsing.
 
-### [utils_sqlite_shrink.py](utils_sqlite_shrink.py)
-Reduces the DuckDB database size by removing BAG tables (nummers, verblijfsobjecten, panden, ligplaatsen and standplaatsen) 
+### [utils_duckdb_shrink.py](utils_duckdb_shrink.py)
+Reduces the DuckDB database size by first removing BAG tables (nummers, verblijfsobjecten, panden, ligplaatsen and standplaatsen) 
 that are no longer needed due to the new 'adressen' table.
 The parser also does this as a final step if `delete_no_longer_needed_bag_tables` is set to `True` in [config.py](config.py).
-Note that this currently does **not** reduce the file size of the DuckDB database.
+
+Since removing tables does not reduce a DuckDB file size, a copy of all tables is made to a new (initially empty) database. This copy *will* have a smaller size than the original. The original database is then replaced with this smaller copy.
+
+With geometry parsing enabled, the bag.duckdb database will be roughly 10GB. After running this script that will be reduced to just over 5GB.
 
 ## Adressen table
 An adres is a nevenadres if the `hoofd_nummer_id` field is set. It points to the `nummer_id` of the hoofdadres. 
