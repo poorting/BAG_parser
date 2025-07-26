@@ -17,4 +17,4 @@ class GemeentenParser:
         utils.print_log('parse gemeenten/provincies xlsx/csv start')
         self.start_time = time.perf_counter()
         self.database.create_gemeenten_provincies(config.file_gemeenten)
-        utils.print_log(f"parse gemeenten/provincies csv ready {utils.time_elapsed(self.start_time)}")
+        utils.print_log(f"parse gemeenten/provincies xlsx/csv ready {utils.time_elapsed(self.start_time)}")

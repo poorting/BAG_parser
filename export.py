@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 
 from exporter import Exporter
 
-parser = ArgumentParser(description='Export addresses in DuckDB database to a Parquet, TSV or JSON file')
+parser = ArgumentParser(description='Export addresses or postcodes in DuckDB database to a Parquet (default), DuckDB, TSV or JSON file')
 
 helpText = ("Export all data including year of construction, latitude, longitude, floor area and intended use of "
             "buildings")
@@ -21,11 +21,14 @@ parser.add_argument('-p5', '--postcode5', action='store_true', help=helpText)
 helpText = "Export statistics of 6 character postal code groups (e.g. 1000AA)"
 parser.add_argument('-p6', '--postcode6', action='store_true', help=helpText)
 
-helpText = "Export to TSV (Tab Separated Values) rather than Parquet"
+helpText = "Export as TSV (Tab Separated Values) rather than Parquet"
 parser.add_argument('--tsv', action='store_true', help=helpText)
 
-helpText = "Export to JSON rather than Parquet"
+helpText = "Export as JSON rather than Parquet"
 parser.add_argument('--json', action='store_true', help=helpText)
+
+helpText = "Export as DuckDB rather than Parquet"
+parser.add_argument('--duckdb', action='store_true', help=helpText)
 
 args = parser.parse_args()
 
@@ -39,6 +42,12 @@ if args.tsv:
 elif args.json:
     ext = 'json'
     export_options = "(ARRAY)"
+elif args.duckdb:
+    ext = 'duckdb'
+    if args.all or args.geometry:
+        export_options = 'adressen'
+    else:
+        export_options = 'postcode'
 
 if args.all:
     exporter.export(f'output/adressen_all_data.{ext}', export_options, False)

@@ -10,6 +10,11 @@ import config
 import utils
 from bag import rijksdriehoek
 
+FIND_FIELD = 0
+FIND_FIELD_MULTI = 1
+FIND_NESTED_FIELD = 2
+FIND_NESTED_FIELD_MULTI = 3
+
 def prettyprint(element, prepend=''):
     # xml = etree.tostring(element, pretty_print=True)
     # print(xml.decode(), end='')
@@ -27,7 +32,22 @@ def prettyprint(element, prepend=''):
 def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
     today_string = utils.bag_date_today()
 
-    def find_nested(bag_element, nested_list):
+    def find_field(bag_element, field_name):
+        # print(f"find_field {bag_element}, {nested_list}")
+        field = bag_element.findall('.//{*}' + field_name)
+        if field:
+            return field[0].text
+        return None
+
+    def find_field_multi(bag_element, field_name):
+        # print(f"find_field {bag_element}, {nested_list}")
+        fields = bag_element.findall('.//{*}' + field_name)
+        if fields:
+            doelen = [field.text for field in fields]
+            return "\t".join(doelen)
+        return None
+
+    def find_nested_field(bag_element, nested_list):
         # print(f"find_nested {bag_element}, {nested_list}")
         nested_list1 = nested_list.copy()
         nested_field = nested_list1.pop(0)
@@ -35,10 +55,37 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
         if field:
             # print(f"\tfound: {field}")
             if nested_list1:
-                return find_nested(field[0], nested_list1)
+                return find_nested_field(field[0], nested_list1)
             else:
                 # print(f"\tvalue: {field[0].text}")
                 return field[0].text
+
+        return None
+
+    def find_nested_field_multi(bag_element, nested_list):
+        # print(f"find_nested {bag_element}, {nested_list}")
+        nested_list1 = nested_list.copy()
+        nested_field = nested_list1.pop(0)
+        fields = bag_element.findall('.//{*}' + nested_field)
+        if fields:
+            result_list = None
+            # if len(fields) > 1:
+            #     print(f"\tfound: {fields} {len(fields)} times")
+            if nested_list1:
+                for field in fields:
+                    # return find_nested(field[0], nested_list1)
+                    res = find_nested_field_multi(field, nested_list1)
+                    if res:
+                        if not result_list:
+                            result_list = res
+                        else:
+                            result_list.extend(res)
+                return result_list
+            else:
+                # print(f"\tvalue: {field[0].text}")
+                # return [field.text for field in fields]
+                doelen = [field.text for field in fields]
+                return "\t".join(doelen)
 
         return None
 
@@ -68,6 +115,7 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
     data = data_init.copy()
     coordinates_field = None
     has_geometry = False
+    # list_field = None
     # 2 or 3 coordinates for geometry?
     # (Panden use 3, ligplaats & standplaats use 2)
     geometry_points = 2
@@ -92,6 +140,7 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
             geometry_points = 3
         case 'Verblijfsobject':
             coordinates_field = 'pos'
+            # list_field = 'gebruiksdoel'
         case 'Ligplaats':
             coordinates_field = 'geometry'
             has_geometry = True
@@ -107,8 +156,22 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
 
     for bag_object in bag_objects:
         data = data_init.copy()
-        for db_field, xml_field in db_fields.items():
-            data[db_field] = find_nested(bag_object, xml_field)
+        for db_field, (xml_field, find_function) in db_fields.items():
+            # data[db_field] = find_nested(bag_object, xml_field)
+            # results = find_function(bag_object, xml_field)
+            # print(f"{xml_field} : {results} - {len(results) if results else 'None'}")
+            # data[db_field] = find_functions[find_function](bag_object, xml_field)
+            if find_function == FIND_FIELD:
+                    data[db_field] = find_field(bag_object, xml_field)
+            elif find_function == FIND_NESTED_FIELD:
+                    data[db_field] = find_nested_field(bag_object, xml_field)
+            elif find_function == FIND_FIELD_MULTI:
+                    data[db_field] = find_field_multi(bag_object, xml_field)
+            elif find_function == FIND_NESTED_FIELD_MULTI:
+                data[db_field] = find_nested_field_multi(bag_object, xml_field)
+            else:
+                utils.print_log(f"Unknown find_field function ({find_function}), setting field {db_field} to None/NULL", error=True)
+                data[db_field] = None
 
         db_data.append(data)
 
@@ -123,7 +186,6 @@ def parse_xml_file(file_xml, tag_name, data_init, object_tag_name, db_fields):
             db_data = geometry_to_wgs84(db_data, geometry_points)
         else:
             db_data = geometry_to_empty(db_data)
-
     return {'count':xml_count, 'data':db_data}
 
 
@@ -162,7 +224,6 @@ def add_coordinates(rows, field_name):
 
     return rows
 
-
 class BagParser:
     gui_time = None
     folder_temp_xml = "temp_xml"
@@ -193,56 +254,54 @@ class BagParser:
             self.file_bag_code = "9999WPL"
             self.data_init['geometry'] = None
             self.db_fields = {
-                'id': ['identificatie'],
-                'naam': ['naam'],
-                'begindatum_geldigheid': ['beginGeldigheid'],
-                'einddatum_geldigheid': ['eindGeldigheid'],
-                'status': ['status'],
+                'id': ('identificatie', FIND_FIELD),
+                'naam': ('naam', FIND_FIELD),
+                'begindatum_geldigheid': ('beginGeldigheid', FIND_FIELD),
+                'einddatum_geldigheid': ('eindGeldigheid', FIND_FIELD),
+                'status': ('status', FIND_FIELD),
             }
             if config.parse_geometries:
-                self.db_fields['geometry'] = ['posList']
+                self.db_fields['geometry'] = ('posList', FIND_FIELD)
 
         elif self.tag_name == 'GemeenteWoonplaatsRelatie':
             self.object_tag_name = tag_name
             self.file_bag_code = "GEM-WPL-RELATIE"
             self.db_fields = {
-                'begindatum_geldigheid': ['begindatumTijdvakGeldigheid'],
-                'einddatum_geldigheid': ['einddatumTijdvakGeldigheid'],
-                'status': ['status'],
-                'woonplaats_id': ['gerelateerdeWoonplaats', 'identificatie'],
-                'gemeente_id': ['gerelateerdeGemeente', 'identificatie'],
+                'begindatum_geldigheid': ('begindatumTijdvakGeldigheid', FIND_FIELD),
+                'einddatum_geldigheid': ('einddatumTijdvakGeldigheid', FIND_FIELD),
+                'status': ('status', FIND_FIELD),
+                'woonplaats_id': (['gerelateerdeWoonplaats', 'identificatie'], FIND_NESTED_FIELD),
+                'gemeente_id': (['gerelateerdeGemeente', 'identificatie'], FIND_NESTED_FIELD),
             }
 
         elif self.tag_name == 'OpenbareRuimte':
             self.object_tag_name = tag_name
             self.file_bag_code = "9999OPR"
             self.db_fields = {
-                'id': ['identificatie'],
-                'naam': ['naam'],
-                'type': ['type'],
-                'inactief': ['aanduidingRecordInactief'],
-                'begindatum_geldigheid': ['beginGeldigheid'],
-                'einddatum_geldigheid': ['eindGeldigheid'] ,
-                'status': ['status'],
-                'woonplaats_id': ['WoonplaatsRef'],
-                'verkorte_naam': ['verkorteNaam', 'VerkorteNaamOpenbareRuimte', 'verkorteNaam'],
+                'id': ('identificatie', FIND_FIELD),
+                'naam': ('naam', FIND_FIELD),
+                'type': ('type', FIND_FIELD),
+                'inactief': ('aanduidingRecordInactief', FIND_FIELD),
+                'begindatum_geldigheid': ('beginGeldigheid', FIND_FIELD),
+                'einddatum_geldigheid': ('eindGeldigheid', FIND_FIELD),
+                'status': ('status', FIND_FIELD),
+                'woonplaats_id': ('WoonplaatsRef', FIND_FIELD),
+                'verkorte_naam': (['verkorteNaam', 'VerkorteNaamOpenbareRuimte', 'verkorteNaam'], FIND_NESTED_FIELD),
             }
-            # self.db_nested_fields = {
-            # }
         elif self.tag_name == 'Nummeraanduiding':
             self.object_tag_name = tag_name
             self.file_bag_code = "9999NUM"
             self.db_fields = {
-                'id': ['identificatie'],
-                'postcode': ['postcode'],
-                'huisnummer': ['huisnummer'],
-                'huisletter': ['huisletter'],
-                'toevoeging': ['huisnummertoevoeging'],
-                'begindatum_geldigheid': ['beginGeldigheid'],
-                'einddatum_geldigheid': ['eindGeldigheid'],
-                'status': ['status'],
-                'openbare_ruimte_id': ['OpenbareRuimteRef'],
-                'woonplaats_id': ['WoonplaatsRef'],
+                'id': ('identificatie', FIND_FIELD),
+                'postcode': ('postcode', FIND_FIELD),
+                'huisnummer': ('huisnummer', FIND_FIELD),
+                'huisletter': ('huisletter', FIND_FIELD),
+                'toevoeging': ('huisnummertoevoeging', FIND_FIELD),
+                'begindatum_geldigheid': ('beginGeldigheid', FIND_FIELD),
+                'einddatum_geldigheid': ('eindGeldigheid', FIND_FIELD),
+                'status': ('status', FIND_FIELD),
+                'openbare_ruimte_id': ('OpenbareRuimteRef', FIND_FIELD),
+                'woonplaats_id': ('WoonplaatsRef', FIND_FIELD),
             }
 
         elif self.tag_name == 'Pand':
@@ -250,29 +309,29 @@ class BagParser:
             self.file_bag_code = "9999PND"
             self.data_init['geometry'] = None
             self.db_fields = {
-                'id': ['identificatie'],
-                'bouwjaar': ['oorspronkelijkBouwjaar'],
-                'begindatum_geldigheid': ['beginGeldigheid'],
-                'einddatum_geldigheid': ['eindGeldigheid'],
-                'status': ['status'],
+                'id': ('identificatie', FIND_FIELD),
+                'bouwjaar': ('oorspronkelijkBouwjaar', FIND_FIELD),
+                'begindatum_geldigheid': ('beginGeldigheid', FIND_FIELD),
+                'einddatum_geldigheid': ('eindGeldigheid', FIND_FIELD),
+                'status': ('status', FIND_FIELD),
             }
             if config.parse_geometries:
-                self.db_fields['geometry'] = ['posList']
+                self.db_fields['geometry'] = ('posList', FIND_FIELD)
 
         elif self.tag_name == 'Verblijfsobject':
             self.object_tag_name = tag_name
             self.file_bag_code = "9999VBO"
             self.db_fields = {
-                'id': ['identificatie'],
-                'oppervlakte': ['oppervlakte'],
-                'gebruiksdoel': ['gebruiksdoel'],
-                'pos': ['pos'],
-                'begindatum_geldigheid': ['beginGeldigheid'],
-                'einddatum_geldigheid': ['eindGeldigheid'],
-                'status': ['status'],
-                'pand_id': ['PandRef'],
-                'nummer_id': ['heeftAlsHoofdadres', 'NummeraanduidingRef'],
-                'nevenadressen': ['heeftAlsNevenadres', 'NummeraanduidingRef'],
+                'id': ('identificatie', FIND_FIELD),
+                'oppervlakte': ('oppervlakte', FIND_FIELD),
+                'gebruiksdoel': ('gebruiksdoel', FIND_FIELD_MULTI),
+                'pos': ('pos', FIND_FIELD),
+                'begindatum_geldigheid': ('beginGeldigheid', FIND_FIELD),
+                'einddatum_geldigheid': ('eindGeldigheid', FIND_FIELD),
+                'status': ('status', FIND_FIELD),
+                'pand_id': ('PandRef', FIND_FIELD_MULTI),
+                'nummer_id': (['heeftAlsHoofdadres', 'NummeraanduidingRef'], FIND_NESTED_FIELD),
+                'nevenadressen': (['heeftAlsNevenadres', 'NummeraanduidingRef'], FIND_NESTED_FIELD_MULTI),
             }
 
         elif self.tag_name == 'Ligplaats':
@@ -284,13 +343,13 @@ class BagParser:
             self.data_init['latitude'] = None
             self.data_init['longitude'] = None
             self.db_fields = {
-                'id': ['identificatie'],
-                'geometry': ['posList'],
-                'inactief': ['aanduidingRecordInactief'],
-                'begindatum_geldigheid': ['beginGeldigheid'],
-                'einddatum_geldigheid': ['eindGeldigheid'],
-                'status': ['status'],
-                'nummer_id': ['heeftAlsHoofdadres', 'NummeraanduidingRef'],
+                'id': ('identificatie', FIND_FIELD),
+                'geometry': ('posList', FIND_FIELD),
+                'inactief': ('aanduidingRecordInactief', FIND_FIELD),
+                'begindatum_geldigheid': ('beginGeldigheid', FIND_FIELD),
+                'einddatum_geldigheid': ('eindGeldigheid', FIND_FIELD),
+                'status': ('status', FIND_FIELD),
+                'nummer_id': (['heeftAlsHoofdadres', 'NummeraanduidingRef'], FIND_NESTED_FIELD),
             }
 
         elif self.tag_name == 'Standplaats':
@@ -304,13 +363,13 @@ class BagParser:
             # self.data_init['geometry'] = ''
 
             self.db_fields = {
-                'id': ['identificatie'],
-                'geometry': ['posList'],
-                'inactief': ['aanduidingRecordInactief'],
-                'begindatum_geldigheid': ['beginGeldigheid'],
-                'einddatum_geldigheid': ['eindGeldigheid'],
-                'status': ['status'],
-                'nummer_id': ['heeftAlsHoofdadres', 'NummeraanduidingRef'],
+                'id': ('identificatie', FIND_FIELD),
+                'geometry': ('posList', FIND_FIELD),
+                'inactief': ('aanduidingRecordInactief', FIND_FIELD),
+                'begindatum_geldigheid': ('beginGeldigheid', FIND_FIELD),
+                'einddatum_geldigheid': ('eindGeldigheid', FIND_FIELD),
+                'status': ('status', FIND_FIELD),
+                'nummer_id': (['heeftAlsHoofdadres', 'NummeraanduidingRef'], FIND_NESTED_FIELD),
             }
         else:
             raise Exception("Tag name not found")
@@ -321,8 +380,6 @@ class BagParser:
 
         utils.print_log('convert XML files to DuckDB')
         self.__parse_xml_files()
-
-        self.database.commit()
 
         time_elapsed = utils.time_elapsed(self.start_time)
         utils.print_log(f'ready: parse XML {self.tag_name} | {time_elapsed} '
@@ -349,7 +406,7 @@ class BagParser:
             case 'OpenbareRuimte':
                 save_function = self.database.save_openbare_ruimte
                 if config.use_short_street_names:
-                    post_sql = 'UPDATE openbare_ruimten SET naam=verkorte_naam WHERE verkorte_naam is not NULL';
+                    post_sql = 'UPDATE openbare_ruimten SET naam=verkorte_naam WHERE verkorte_naam is not NULL'
             case 'Nummeraanduiding':
                 save_function = self.database.save_nummer
             case 'Pand':
@@ -383,8 +440,13 @@ class BagParser:
         # Multi-threading. One XML file per executor.
         pool = ProcessPoolExecutor(workers_count)
         for file_xml in xml_files:
-            future = pool.submit(parse_xml_file, file_xml, self.tag_name, self.data_init, self.object_tag_name,
-                                 self.db_fields)
+            future = pool.submit(
+                parse_xml_file,
+                file_xml,
+                self.tag_name,
+                self.data_init,
+                self.object_tag_name,
+                self.db_fields)
             futures.append(future)
 
         for future in futures:

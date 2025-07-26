@@ -1,3 +1,4 @@
+#! /usr/bin/env python3
 import utils
 from database_duckdb import DatabaseDuckdb
 

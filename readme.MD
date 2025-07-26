@@ -10,7 +10,7 @@ Original is by [digitaldutch](https://github.com/digitaldutch/BAG_parser) and us
   * Really, you should use Parquet over TSV/CSV...
 * Because why not? :-)
 
-Further improvements are the proper processing of geometry for Panden (later linked to adressen) which weren't properly processed by the original, as well as storing these geometries in a proper format (DuckDB 'GEOMETRY' data type).
+Further improvements are the proper processing of geometry for Panden (later linked to adressen) which weren't properly processed by the original, as well as storing these geometries in an appropriate data type (DuckDB 'GEOMETRY' data type).
 Note that by default parsing of geometries is disabled in config.py. Set 'parse_geometries' to True to enable it. 
 Regardless of this setting, locations are now stored as a single POINT(longitude, latitude) as well (lon_lat field), next to the separate longitude and latitude fields.
 
@@ -31,7 +31,7 @@ Converts in (quite) a few minutes the big, complex and hard to read XML Dutch ad
 en Gebouwen) into a user-friendly, file-based, blazingly fast ~~SQLite~~ **DuckDB** database by running a single Python script. 
 No need to install any dependencies or a database server.
 
-Another oneliner script (see below) will convert this ~~SQLite~~ **DuckDB** database to ~~CSV~~ Parquet_(or CSV or JSON)_ in ~~15 seconds~~ seconds. 
+Another export script (see below) will convert this ~~SQLite~~ **DuckDB** database to ~~CSV~~ Parquet_(or TSV or JSON, or DuckDB)_ in ~~15 seconds~~ seconds. 
 
 ## Download the parsed BAG
 If you don't want to run the script yourself, download the latest BAG in ~~SQLite or CSV~~ parquet format from
@@ -57,7 +57,7 @@ table. The DuckDB database can be used directly as a source to generate a *.tsv,
 databases. There are a couple of options available in the [config.py](config.py).
 
 ## Requirements
-* Python 3.13. Older Python versions may work but are not tested and certainly slower.
+* Python 3.11+ Older Python versions may work but are not tested.
 
 ## Usage
 * Download or use git (recommended as updates are easier) to download the BAG parser.   
@@ -134,49 +134,158 @@ Parses the original BAG file and transforms it into a DuckDB database. Takes abo
 on a MacBook Pro (M1 Pro), roughly 20 minutes on an aging AMD 5 2600; or a few minutes more if you switch on the `parse_geometries` option in the [config.py](config.py).
 
 ### [export.py](export.py)
-Exports the addresses in DuckDB database to a *.parquet (default), *.csv or *.json file. By default, only the addresses and
+Exports the addresses in DuckDB database to a *.parquet (default), *.tsv or *.json file. By default, only the addresses and
 postcode data are exported (~1 second). Use the command options below for more output formats.  
 
 ```
-./export.py -h 
-usage: export.py [-h] [-a] [-ag] [-p4] [-p5] [-p6] [--tsv] [--json]
+./export.py -h
+usage: export.py [-h] [-a] [-ag] [-p4] [-p5] [-p6] [--tsv] [--json] [--duckdb]
 
-Export addresses in DuckDB database to a Parquet, TSV or JSON file
+Export addresses or postcodes in DuckDB database to a Parquet (default), DuckDB, TSV or JSON file
 
 options:
   -h, --help        show this help message and exit
-  -a, --all         Export all data including year of construction, latitude, longitude, floor area and intended use
-                    of buildings
+  -a, --all         Export all data including year of construction, latitude, longitude, floor area and intended use(s) of buildings
   -ag, --geometry   Export all data as above, but including geometry as well (if generated)
   -p4, --postcode4  Export statistics of 4 character postal code groups (e.g. 1000)
   -p5, --postcode5  Export statistics of 5 character postal code groups (e.g. 1000A)
   -p6, --postcode6  Export statistics of 6 character postal code groups (e.g. 1000AA)
-  --tsv             Export to TSV (Tab Separated Values) rather than Parquet
-  --json            Export to JSON rather than Parquet
+  --tsv             Export as TSV (Tab Separated Values) rather than Parquet
+  --json            Export as JSON rather than Parquet
+  --duckdb          Export as DuckDB rather than Parquet
 ```
 
-### [test_sqlite_db.py](test_sqlite_db.py)
+### [test_duckdb_db.py](test_duckdb_db.py)
 Checks the DuckDB database for info and errors. `import_bag.py` also performs these tests after parsing.
 
-### [utils_sqlite_shrink.py](utils_sqlite_shrink.py)
-Reduces the DuckDB database size by removing BAG tables (nummers, verblijfsobjecten, panden, ligplaatsen and standplaatsen) 
+### [utils_duckdb_shrink.py](utils_duckdb_shrink.py)
+Reduces the DuckDB database size by first removing BAG tables (nummers, verblijfsobjecten, panden, ligplaatsen and standplaatsen) 
 that are no longer needed due to the new 'adressen' table.
 The parser also does this as a final step if `delete_no_longer_needed_bag_tables` is set to `True` in [config.py](config.py).
-Note that this currently does **not** reduce the file size of the database.
 
-## Adressen table
+Since removing tables does not reduce a DuckDB file size, a copy of all tables is made to a new (initially empty) database. This copy *will* have a smaller size than the original. The original database is then replaced with this smaller copy.
+
+With geometry parsing enabled, the bag.duckdb database will be roughly 10GB. After running this script that will be reduced to just over 5GB.
+
+## Remarks and guidelines
+
+### Adressen table
 An adres is a nevenadres if the `hoofd_nummer_id` field is set. It points to the `nummer_id` of the hoofdadres. 
+
+### Adressen export with geometries
+Invoking `./export.py -ag` will export a combined adressen table - including geometries - to a parquet file `adressen_all_data_geometry.parquet` in the output folder. 
+
+### Working with parquet file directly
+You can work with this date from DuckDB without loading it into memory like so:
+```commandline
+D install spatial;
+D load spatial;
+D create view adressen as select * from 'adressen_all_data_geometry.parquet';
+```
+You can work with the view the same as with a table. For example to get the number of distinct postcodes within roughly the Amsterdam area:
+```commandline
+SELECT count(distinct(postcode)) FROM adressen WHERE ST_Contains(ST_GeomFromText('POLYGON ((4.805820879982093 52.283282143126215,5.002544817970374 52.283282143126215,5.002544817970374 52.43005962183452,4.805820879982093 52.43005962183452, 4.805820879982093 52.283282143126215))'), lon_lat);
+┌──────────────────────────┐
+│ count(DISTINCT postcode) │
+│          int64           │
+├──────────────────────────┤
+│          20277           │
+└──────────────────────────┘
+Run Time (s): real 0.678 user 6.417792 sys 0.406322
+```
+If you **do** want to load the data into memory (for marginally faster performance) simply replace 'view' with 'table' in the create command above. The postcode example given will then complete in roughly 0.57 seconds instead of 0.68, demonstrating the ability of DuckDB to efficiently query from parquet files on disk!
+
+Of course both approaches will work for any parquet file, not just this one. Especially creating a view is really useful if you encounter an unknown parquet file (even those much larger than available memory) and would like to inspect it :-) 
+
+### Parquet/DuckDB schema
+```
+D describe adressen;
+┌──────────────────┬─────────────┬─────────┬─────────┬─────────┬─────────┐
+│   column_name    │ column_type │  null   │   key   │ default │  extra  │
+│     varchar      │   varchar   │ varchar │ varchar │ varchar │ varchar │
+├──────────────────┼─────────────┼─────────┼─────────┼─────────┼─────────┤
+│ straat           │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ huisnummer       │ INTEGER     │ YES     │ NULL    │ NULL    │ NULL    │
+│ toevoeging       │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ postcode         │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ gemeente         │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ gm_code          │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ woonplaats       │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ provincie        │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ pv_code          │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ bouwjaar         │ INTEGER     │ YES     │ NULL    │ NULL    │ NULL    │
+│ rd_x             │ DOUBLE      │ YES     │ NULL    │ NULL    │ NULL    │
+│ rd_y             │ DOUBLE      │ YES     │ NULL    │ NULL    │ NULL    │
+│ latitude         │ DOUBLE      │ YES     │ NULL    │ NULL    │ NULL    │
+│ longitude        │ DOUBLE      │ YES     │ NULL    │ NULL    │ NULL    │
+│ lon_lat          │ GEOMETRY    │ YES     │ NULL    │ NULL    │ NULL    │
+│ vloeroppervlakte │ DOUBLE      │ YES     │ NULL    │ NULL    │ NULL    │
+│ gebruiksdoel     │ VARCHAR[]   │ YES     │ NULL    │ NULL    │ NULL    │
+│ hoofd_nummer_id  │ VARCHAR     │ YES     │ NULL    │ NULL    │ NULL    │
+│ geometry         │ GEOMETRY    │ YES     │ NULL    │ NULL    │ NULL    │
+├──────────────────┴─────────────┴─────────┴─────────┴─────────┴─────────┤
+│ 19 rows                                                      6 columns │
+└────────────────────────────────────────────────────────────────────────┘
+
+```
+
 
 ## Limitations and notes
 * The WGS84 coordinates are calculated using [approximation equations by F.H. Schreutelkamp and G.L. Strang van Hees](docs/Benaderingsformules_RD_WGS.pdf). This conversion has an error of a few decimeters. Don't use the 
 WGS84 coordinates if you need higher accuracy. 
 * verblijfsobjecten table:  
   Some gebruiksdoel, pand_id and nevenadressen fields contain multiple,
-  comma-separated, values. Be careful if you do queries with joins on those fields.
+  tab-separated ('\\t'), values. Be careful if you do queries with joins on those fields. In the adressen table these are converted to lists. If you need to search for specific gebruiksdoel in this table use wildcards, e.g. `WHERE gebruiksdoel LIKE '%woonfunctie%'`. If you need to search for occurrences with multiple values for gebruiksdoel you can do `WHERE gebruiksdoel LIKE e'%\t%'`(note the `e` character that tells DuckDB the string contains escape characters!)
 * Adressen table:  
-  * Some gebruiksdoel and pand_id fields contain multiple, comma-separated, values.
-  * The bouwjaar and geometry field only contain the data of one pand, even if an address has multiple panden. 
-* There are probably several more things missing that I don't know about. Feel free to file a [GitHub issue](https://github.com/digitaldutch/BAG_parser/issues).
+  * The gebruiksdoel and pand_id fields are lists of TEXT ('VARCHAR[]') and can contain multiple values. For example: 
+```commandline
+select gebruiksdoel from adressen where len(gebruiksdoel)>7;
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                               gebruiksdoel                                                               │
+│                                                                varchar[]                                                                 │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ [woonfunctie, bijeenkomstfunctie, industriefunctie, kantoorfunctie, logiesfunctie, sportfunctie, winkelfunctie, overige gebruiksfunctie] │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+Run Time (s): real 0.048 user 0.477776 sys 0.011105
+```
+You can search for specific gebruiksdoelen with the `list_contains` function, e.g.:
+```commandline
+select count() as woningen from adressen where list_contains(gebruiksdoel,'woonfunctie');
+┌────────────────┐
+│    woningen    │
+│     int64      │
+├────────────────┤
+│    8556948     │
+│ (8.56 million) │
+└────────────────┘
+Run Time (s): real 0.062 user 0.572649 sys 0.010185
+```
+If you want to see all possible values of gebruiksdoel:
+```
+select unnest(list_distinct(flatten(list(distinct(gebruiksdoel))))) as gebruiksdoelen from adressen order by gebruiksdoelen asc; 
+┌─────────────────────────┐
+│     gebruiksdoelen      │
+│         varchar         │
+├─────────────────────────┤
+│ bijeenkomstfunctie      │
+│ celfunctie              │
+│ gezondheidszorgfunctie  │
+│ industriefunctie        │
+│ kantoorfunctie          │
+│ logiesfunctie           │
+│ onderwijsfunctie        │
+│ overige gebruiksfunctie │
+│ sportfunctie            │
+│ winkelfunctie           │
+│ woonfunctie             │
+├─────────────────────────┤
+│         11 rows         │
+└─────────────────────────┘
+Run Time (s): real 0.138 user 1.227641 sys 0.053784
+```
+
+  * If multiple panden are linked to the same address then the geometries are combined (with DuckDB's `ST_Collect`) as a MULTIPOLYGON. However, the bouwjaar is set to the lowest (earliest) value from the set of panden. 
+* There are probably several more things missing that I don't know about. Feel free to file a [GitHub issue](https://github.com/poorting/BAG_parser/issues).
 
 ## Documents
 * [Praktijkhandleiding BAG](https://imbag.github.io/praktijkhandleiding/) 
