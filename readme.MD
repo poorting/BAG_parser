@@ -31,7 +31,7 @@ Converts in (quite) a few minutes the big, complex and hard to read XML Dutch ad
 en Gebouwen) into a user-friendly, file-based, blazingly fast ~~SQLite~~ **DuckDB** database by running a single Python script. 
 No need to install any dependencies or a database server.
 
-Another oneliner script (see below) will convert this ~~SQLite~~ **DuckDB** database to ~~CSV~~ Parquet_(or CSV or JSON)_ in ~~15 seconds~~ seconds. 
+Another export script (see below) will convert this ~~SQLite~~ **DuckDB** database to ~~CSV~~ Parquet_(or TSV or JSON, or DuckDB)_ in ~~15 seconds~~ seconds. 
 
 ## Download the parsed BAG
 If you don't want to run the script yourself, download the latest BAG in ~~SQLite or CSV~~ parquet format from
@@ -138,21 +138,21 @@ Exports the addresses in DuckDB database to a *.parquet (default), *.tsv or *.js
 postcode data are exported (~1 second). Use the command options below for more output formats.  
 
 ```
-./export.py -h 
-usage: export.py [-h] [-a] [-ag] [-p4] [-p5] [-p6] [--tsv] [--json]
+./export.py -h
+usage: export.py [-h] [-a] [-ag] [-p4] [-p5] [-p6] [--tsv] [--json] [--duckdb]
 
-Export addresses in DuckDB database to a Parquet, TSV or JSON file
+Export addresses or postcodes in DuckDB database to a Parquet (default), DuckDB, TSV or JSON file
 
 options:
   -h, --help        show this help message and exit
-  -a, --all         Export all data including year of construction, latitude, longitude, floor area and intended use
-                    of buildings
+  -a, --all         Export all data including year of construction, latitude, longitude, floor area and intended use(s) of buildings
   -ag, --geometry   Export all data as above, but including geometry as well (if generated)
   -p4, --postcode4  Export statistics of 4 character postal code groups (e.g. 1000)
   -p5, --postcode5  Export statistics of 5 character postal code groups (e.g. 1000A)
   -p6, --postcode6  Export statistics of 6 character postal code groups (e.g. 1000AA)
-  --tsv             Export to TSV (Tab Separated Values) rather than Parquet
-  --json            Export to JSON rather than Parquet
+  --tsv             Export as TSV (Tab Separated Values) rather than Parquet
+  --json            Export as JSON rather than Parquet
+  --duckdb          Export as DuckDB rather than Parquet
 ```
 
 ### [test_duckdb_db.py](test_duckdb_db.py)
@@ -167,10 +167,12 @@ Since removing tables does not reduce a DuckDB file size, a copy of all tables i
 
 With geometry parsing enabled, the bag.duckdb database will be roughly 10GB. After running this script that will be reduced to just over 5GB.
 
-## Adressen table
+## Remarks and guidelines
+
+### Adressen table
 An adres is a nevenadres if the `hoofd_nummer_id` field is set. It points to the `nummer_id` of the hoofdadres. 
 
-## Adressen export with geometries
+### Adressen export with geometries
 Invoking `./export.py -ag` will export a combined adressen table - including geometries - to a parquet file `adressen_all_data_geometry.parquet` in the output folder. 
 
 ### Working with parquet file directly
@@ -193,21 +195,7 @@ Run Time (s): real 0.678 user 6.417792 sys 0.406322
 ```
 If you **do** want to load the data into memory (for marginally faster performance) simply replace 'view' with 'table' in the create command above. The postcode example given will then complete in roughly 0.57 seconds instead of 0.68, demonstrating the ability of DuckDB to efficiently query from parquet files on disk!
 
-### Transforming parquet to DuckDB database
-If you would rather have a .duckdb file to open directly with DuckDB you can simply do:
-```commandline
-duckdb adressen.duckdb
-v1.2.2 7c039464e4
-Enter ".help" for usage hints.
-D install spatial;
-D load spatial;
-D create or replace table adressen as select * from 'adressen_all_data_geometry.parquet';
-100% ▕████████████████████████████████████████████████████████████▏ 
-D .exit
-```
-The resulting .duckdb file can directly be opened by DuckDB again. 
-
-Of course both approaches will work for any parquet file, not just this one. Especially creating a view is really useful if you encounter an unknown parquet file and would like to inspect it :-) 
+Of course both approaches will work for any parquet file, not just this one. Especially creating a view is really useful if you encounter an unknown parquet file (even those much larger than available memory) and would like to inspect it :-) 
 
 ### Parquet/DuckDB schema
 ```
