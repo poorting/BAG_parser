@@ -1,6 +1,8 @@
 [![GitHub license](https://img.shields.io/github/license/digitaldutch/BAG_parser)](https://github.com/digitaldutch/BAG_parser/blob/master/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/digitaldutch/BAG_parser)](https://github.com/digitaldutch/BAG_parser/issues)
 
+Check out my Rust implementation [BAG of Rust (BOR)](https://codeberg.org/poorting/BAG_of_Rust) that does exactly the same thing, only 5 times faster!
+
 # Digital Dutch BAG parser
 
 Original is by [digitaldutch](https://github.com/digitaldutch/BAG_parser) and uses SQLite as a database. I simply changed it to use DuckDB instead for the following reasons:
