@@ -1,7 +1,10 @@
 [![GitHub license](https://img.shields.io/github/license/digitaldutch/BAG_parser)](https://github.com/digitaldutch/BAG_parser/blob/master/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/digitaldutch/BAG_parser)](https://github.com/digitaldutch/BAG_parser/issues)
 
-Check out my Rust implementation [BAG of Rust (BOR)](https://codeberg.org/poorting/BAG_of_Rust) that does exactly the same thing, only 5 times faster!
+
+***With the new Rust implementation [BAG of Rust (BOR)](https://codeberg.org/poorting/BAG_of_Rust) (doing the same thing, only 5 times faster) fully functional, this parser will no longer be actively maintained.***
+
+
 
 # Digital Dutch BAG parser
 
@@ -48,6 +51,7 @@ which will quickly reduce your initial enthusiasm.
 It also does not include municipalities or provinces and provides coordinates using a system that non-experts won't 
 expect named 
  [Rijksdriehoekscoördinaten](https://nl.wikipedia.org/wiki/Rijksdriehoeksco%C3%B6rdinaten)😲. 
+
 
 ## What this parser does
 This Python utility parses the BAG database and converts it into a clean, easy to read & use DuckDB database.
