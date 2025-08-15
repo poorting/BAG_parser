@@ -2,7 +2,7 @@
 [![GitHub issues](https://img.shields.io/github/issues/digitaldutch/BAG_parser)](https://github.com/digitaldutch/BAG_parser/issues)
 
 
-***With the new Rust implementation [BAG of Rust (BOR)](https://codeberg.org/poorting/BAG_of_Rust) (doing the same thing, only 5 times faster) fully functional, this parser will no longer be actively maintained.***
+***With the new Rust implementation [BAG of Rust (BOR)](https://codeberg.org/poorting/BAG_of_Rust) (doing the same thing, but improved and 5 to 7 times faster) fully functional, this BAG_parser fork is no longer actively maintained.***
 
 
 
